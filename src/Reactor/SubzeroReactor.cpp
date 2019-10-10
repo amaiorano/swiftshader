@@ -79,6 +79,18 @@ namespace
 	Ice::Fdstream *out = nullptr;
 }
 
+namespace rr
+{
+	void flushOutputStreams()
+	{
+		if (context)
+		{
+			context->getStrDump().SetUnbuffered();
+			//context->getStrDump().flush();
+		}
+	}
+}
+
 namespace
 {
 	#if !defined(__i386__) && defined(_M_IX86)
@@ -573,7 +585,7 @@ namespace rr
 		Flags.setOutFileType(Ice::FT_Elf);
 		Flags.setOptLevel(toIce(getDefaultConfig().getOptimization().getLevel()));
 		Flags.setApplicationBinaryInterface(Ice::ABI_Platform);
-		Flags.setVerbose(false ? Ice::IceV_Most : Ice::IceV_None);
+		Flags.setVerbose(true ? Ice::IceV_Most : Ice::IceV_None);
 		Flags.setDisableHybridAssembly(true);
 
 		static llvm::raw_os_ostream cout(std::cout);

@@ -63,6 +63,8 @@ namespace rr
 	};
 	extern const Capabilities Caps;
 
+	void flushOutputStreams();
+
 	class Bool;
 	class Byte;
 	class SByte;
