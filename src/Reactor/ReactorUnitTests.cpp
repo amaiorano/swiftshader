@@ -1105,6 +1105,8 @@ TEST(ReactorUnitTests, PointersEqual)
 	EXPECT_EQ(equal(&a, &c), 0);
 }
 
+//extern "C" void __stdcall GlobalFunVII(int a, int b) {}
+
 TEST(ReactorUnitTests, Call)
 {
 	if (!rr::Caps.CallSupported)
@@ -1113,45 +1115,365 @@ TEST(ReactorUnitTests, Call)
 		return;
 	}
 
-	std::shared_ptr<Routine> routine;
+	//{
+	//	struct Class
+	//	{
+	//		static void FunVV()
+	//		{
+	//		}
+	//	};
 
-	struct Class
+	//	Function<Void()> function;
+	//	{
+	//		Call(Class::FunVV);
+	//		Return();
+	//	}
+	//	
+	//	if (auto routine = function("one"))
+	//	{
+	//		auto callable = (void(*)())routine->getEntry();
+	//		callable();
+	//	}
+	//}
+
+	//{
+	//	struct Class
+	//	{
+	//		static int FunIV()
+	//		{
+	//			return 42;
+	//		}
+	//	};
+
+	//	Function<Int()> function;
+	//	{
+	//		auto res = Call(Class::FunIV);
+	//		Return(res);
+	//	}
+	//	
+	//	if (auto routine = function("one"))
+	//	{
+	//		auto callable = (int(*)())routine->getEntry();
+	//		int res = callable();
+	//		EXPECT_EQ(res, 42);
+	//	}
+	//}
+
+	//{
+	//	struct Class
+	//	{
+	//		static int FunII(int a)
+	//		{
+	//			return a;
+	//		}
+	//	};
+
+	//	Function<Int(Int)> function;
+	//	{
+	//		Int arg1 = function.Arg<0>();
+	//		auto res = Call(Class::FunII, arg1);
+	//		Return(res);
+	//	}
+
+	//	if (auto routine = function("one"))
+	//	{
+	//		auto callable = (int(*)(int))routine->getEntry();
+	//		int res = callable(43);
+	//		EXPECT_EQ(res, 43);
+	//	}
+	//}
+
+	//{
+	//	struct Class
+	//	{
+	//		static float FuncFV()
+	//		{
+	//			return 45.6f;
+	//		}
+	//	};
+
+	//	Function<Float()> function;
+	//	{
+	//		auto res = Call(Class::FuncFV);
+	//		Return(res);
+	//	}
+	//	if (auto routine = function("one"))
+	//	{
+	//		auto callable = (float(*)())routine->getEntry();
+	//		float res = callable();
+	//		EXPECT_EQ(res, 45.6f);
+	//	}
+	//}
+
+	//{
+	//	struct Class
+	//	{
+	//		static int FuncIP(uint8_t* p)
+	//		{
+	//			return *p;
+	//		}
+	//	};
+
+	//	Function<Int(Pointer<Byte>)> function;
+	//	{
+	//		Pointer<Byte> v = function.Arg<0>();
+	//		auto res = Call(Class::FuncIP, v);
+	//		Return(res);
+	//	}
+	//	
+	//	if (auto routine = function("one"))
+	//	{
+	//		auto callable = (int(*)(uint8_t*))routine->getEntry();
+	//		uint8_t v = 3;
+	//		int res = callable(&v);
+	//		EXPECT_EQ(res, 3);
+	//	}
+	//}
+
+	// Enable flush on every output (slow, but useful)
+	//rr::flushOutputStreams();
+
+	//{
+	//	struct Class
+	//	{
+	//		static void FuncVIII(int a, int b, int c)
+	//		{
+	//		}
+	//	};
+
+	//	Function<Void(Int, Int)> function;
+	//	{
+	//		Int a = function.Arg<0>();
+	//		Int b = function.Arg<1>();
+	//		Int c = function.Arg<1>();
+	//		Call(Class::FuncVIII, a, b, c);
+	//		Return();
+	//	}
+
+	//	if (auto routine = function("one"))
+	//	{
+	//		auto callable = (void(*)(int, int))routine->getEntry();
+	//		callable(12, 13);
+	//	}
+	//}
+
+
+
+
+	// 2 mixed type args
+	//{
+	//	Function<Float(Int, Float)> function;
+	//	{
+	//		Int a = function.Arg<0>();
+	//		Float b = function.Arg<1>();
+	//		Return(Float(a) + b);
+	//	}
+
+	//	if (auto routine = function("one"))
+	//	{
+	//		auto callable = (float(*)(int, float))routine->getEntry();
+	//		float result = callable(1, 2.f);
+	//		//printf("%f\n", result);
+	//		EXPECT_EQ(result, 3.f);
+	//	}
+	//}
+
+	//// 4 mixed type args (max register allocation on Windows)
+	//{
+	//	Function<Float(Int, Float, Int, Float)> function;
+	//	{
+	//		Int a = function.Arg<0>();
+	//		Float b = function.Arg<1>();
+	//		Int c = function.Arg<2>();
+	//		Float d = function.Arg<3>();
+	//		//RR_WATCH(a, b, c, d, e);
+	//		Return(Float(a) + b + Float(c) + d);
+	//	}
+
+	//	if (auto routine = function("one"))
+	//	{
+	//		auto callable = (float(*)(int, float, int, float))routine->getEntry();
+	//		float result = callable(1, 2.f, 3, 4.f);
+	//		//printf("%f\n", result);
+	//		EXPECT_EQ(result, 10.f);
+	//	}
+	//}
+
+
+
+	// 5 mixed type args (5th spills over to stack on Windows)
+	//{
+	//	Function<Float(Int, Float, Int, Float, Int)> function;
+	//	{
+	//		Int a = function.Arg<0>();
+	//		Float b = function.Arg<1>();
+	//		Int c = function.Arg<2>();
+	//		Float d = function.Arg<3>();
+	//		Int e = function.Arg<4>();
+	//		//RR_WATCH(a, b, c, d, e);
+	//		Return(Float(a) + b + Float(c) + d + Float(e));
+	//	}
+
+	//	if (auto routine = function("one"))
+	//	{
+	//		auto callable = (float(*)(int, float, int, float, int))routine->getEntry();
+	//		float result = callable(1, 2.f, 3, 4.f, 5);
+	//		printf("%f\n", result);
+	//		EXPECT_EQ(result, 15.f);
+	//	}
+	//}
+
+	// >5 mixed type args
 	{
-		static int Callback(uint8_t *p, int i, float f)
+		Function<Float(Int, Float, Int, Float, Int, Float, Int, Float, Int, Float)> function;
 		{
-			auto c = reinterpret_cast<Class*>(p);
-			c->i = i;
-			c->f = f;
-			return i + int(f);
+			Int a = function.Arg<0>();
+			Float b = function.Arg<1>();
+			Int c = function.Arg<2>();
+			Float d = function.Arg<3>();
+			Int e = function.Arg<4>();
+			Float f = function.Arg<5>();
+			Int g = function.Arg<6>();
+			Float h = function.Arg<7>();
+			Int i = function.Arg<8>();
+			Float j = function.Arg<9>();
+			Return(Float(a) + b + Float(c) + d + Float(e) + f + Float(g) + h + Float(i) + j);
 		}
 
-		int i = 0;
-		float f = 0.0f;
-	};
+		// Enable flush on every output (slow, but useful)
+		rr::flushOutputStreams();
 
-	{
-		Function<Int(Pointer<Byte>)> function;
+		if (auto routine = function("one"))
 		{
-			Pointer<Byte> c = function.Arg<0>();
-			auto res = Call(Class::Callback, c, 10, 20.0f);
-			Return(res);
-		}
-
-		routine = function("one");
-
-		if(routine)
-		{
-			int(*callable)(void*) = (int(*)(void*))routine->getEntry();
-
-			Class c;
-
-			int res = callable(&c);
-
-			EXPECT_EQ(res, 30);
-			EXPECT_EQ(c.i, 10);
-			EXPECT_EQ(c.f, 20.0f);
+			auto callable = (float(*)(int, float, int, float, int, float, int, float, int, float))routine->getEntry();
+			float result = callable(1, 2.f, 3, 4.f, 5, 6.f, 7, 8.f, 9, 10.f);
+			printf("%f\n", result);
+			EXPECT_EQ(result, 55.f);
 		}
 	}
+
+
+	// Reactor routine -> External Function -> Reactor routine
+	{
+		auto routine2 = [] {
+			Function<Float(Float, Int)> function;
+			{
+				Float a = function.Arg<0>();
+				Int b = function.Arg<1>();
+				Return(a + Float(b));
+			}
+			return function("two");
+		}();
+
+		struct Class
+		{
+			static float Func(void* p, float a, int b)
+			{
+				auto funcToCall = reinterpret_cast<float(*)(float, int)>(p);
+				return funcToCall(a, b);
+			}
+		};
+
+		auto routine1 = [] {
+			Function<Float(Pointer<Byte>)> function;
+			{
+				Pointer<Byte> funcToCall = function.Arg<0>();				
+				Float result = Call(Class::Func, funcToCall, 12.f, 13);
+				Return(result);
+			}
+			return function("one");
+		}();
+
+		auto callable2 = (float(*)(float,int))routine2->getEntry();
+		auto callable1 = (float(*)(void*))routine1->getEntry();
+
+		float result = callable1((void*)callable2);
+	}
+
+
+
+	//{
+	//	struct Class
+	//	{
+	//		static void Func(void* p, float f1, int i1, float f2, int i2)
+	//		{
+	//			auto* c = reinterpret_cast<Class*>(p);
+	//			c->f1 = f1;
+	//			c->i1 = i1;
+	//			c->f2 = f2;
+	//			c->i2 = i2;
+	//			//c->f3 = f3;
+	//		}
+
+	//		static void Func2(int i1, int i2, int i3, int i4, int i5, int i6)
+	//		{
+	//			int a = i5;
+	//			int b = i6;
+	//			//printf("Hello\n%d %d\n", a, b);
+	//		}
+
+	//		float f1, f2, f3;
+	//		int i1, i2;
+	//	};
+
+	//	Function<Void(Pointer<Byte>)> function;
+	//	{
+	//		Pointer<Byte> c = function.Arg<0>();
+	//		//Call(Class::Func, c, 21.3f, 42, 45.6f, 84/*, 78.9f*/);
+	//		Call(Class::Func2, 1, 2, 3, 4, 5, 6);
+	//		Return();
+	//	}
+
+	//	if (auto routine = function("one"))
+	//	{
+	//		auto callable = (void(*)(void*))routine->getEntry();
+	//		Class c;
+	//		callable(&c);
+	//		EXPECT_EQ(c.f1, 21.3f);
+	//		EXPECT_EQ(c.i1, 42);
+	//		EXPECT_EQ(c.f2, 45.6f);
+	//		EXPECT_EQ(c.i2, 84);
+	//		//EXPECT_EQ(c.f3, 78.9f);
+	//	}
+	//}
+
+	//{
+	//	struct Class
+	//	{
+	//		static int Callback(uint8_t* p, int i, float f)
+	//		{
+	//			auto c = reinterpret_cast<Class*>(p);
+	//			c->i = i;
+	//			c->f = f;
+	//			return i + int(f);
+	//		}
+
+	//		int i = 0;
+	//		float f = 0.0f;
+	//	};
+
+	//	Function<Int(Pointer<Byte>)> function;
+	//	{
+	//		Pointer<Byte> c = function.Arg<0>();
+	//		auto res = Call(Class::Callback, c, 10, 20.0f);
+	//		Return(res);
+	//	}
+
+	//	auto routine = function("one");
+
+	//	if(routine)
+	//	{
+	//		int(*callable)(void*) = (int(*)(void*))routine->getEntry();
+
+	//		Class c;
+
+	//		int res = callable(&c);
+
+	//		EXPECT_EQ(res, 30);
+	//		EXPECT_EQ(c.i, 10);
+	//		EXPECT_EQ(c.f, 20.0f);
+	//	}
+	//}
 
 }
 
