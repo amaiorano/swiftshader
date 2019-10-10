@@ -1487,6 +1487,15 @@ if(${REACTOR_BACKEND} STREQUAL "Subzero")
         ${SUBZERO_DIR}/src/IceVariableSplitting.cpp
     )
 
+    # FIXME: Don't all add headers/defs, only the ones for current ARCH
+    file(GLOB_RECURSE SUBZERO_HEADERS_LIST
+        ${SUBZERO_DIR}/*.h
+        ${SUBZERO_DIR}/*.def
+    )
+    list(APPEND SUBZERO_LIST
+        ${SUBZERO_HEADERS_LIST}
+    )
+
     # FIXME: Shouldn't depend on external source files directly.
     list(APPEND SUBZERO_LIST
         ${SOURCE_DIR}/Common/Memory.cpp
@@ -1524,7 +1533,7 @@ if(${REACTOR_BACKEND} STREQUAL "Subzero")
         message(FATAL_ERROR "Architecture '${ARCH}' not supported by Subzero")
     endif()
 
-    file(GLOB_RECURSE SUBZERO_DEPENDENCIES_LIST
+    file(GLOB_RECURSE SUBZERO_LLVM_LIST
         ${SUBZERO_LLVM_DIR}/*.cpp
         ${SUBZERO_LLVM_DIR}/*.c
         ${SUBZERO_LLVM_DIR}/*.h
@@ -1564,9 +1573,14 @@ if(${REACTOR_BACKEND} STREQUAL "Subzero")
         )
     endif()
 
+    if(USE_GROUP_SOURCES)
+        group_all_sources(third_party/subzero)
+        group_all_sources(third_party/llvm-subzero)
+    endif()
+    
     add_library(ReactorSubzero STATIC
         ${SUBZERO_LIST}
-        ${SUBZERO_DEPENDENCIES_LIST}
+        ${SUBZERO_LLVM_LIST}
         ${SUBZERO_REACTOR_LIST}
     )
     set_target_properties(ReactorSubzero PROPERTIES
