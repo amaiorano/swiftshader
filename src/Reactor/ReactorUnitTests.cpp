@@ -21,6 +21,58 @@
 
 using namespace rr;
 
+namespace rr
+{
+	// RoutineT is a type-safe wrapper around a Routine, returned by FunctionT
+	template<typename FunctionType>
+	class RoutineT;
+
+	template<typename Return, typename... Arguments>
+	class RoutineT<Return(Arguments...)>
+	{
+	public:
+		explicit RoutineT(const std::shared_ptr<Routine>& routine)
+			: routine(routine)
+		{
+			callable = reinterpret_cast<CallableType>(routine->getEntry(0));
+		}
+
+		Return operator()(Arguments... args)
+		{
+			return callable(std::forward<Arguments>(args)...);
+		}
+		
+	private:
+		std::shared_ptr<Routine> routine;
+		using CallableType = Return(*)(Arguments...);
+		CallableType callable = nullptr;
+	};
+
+	// FunctionT accepts a C-style function type template argument, allowing it to return a type-safe RoutineT wrapper
+	template<typename FunctionType>
+	class FunctionT;
+
+	template<typename Return, typename... Arguments>
+	class FunctionT<Return(Arguments...)> : public Function<CToReactor<Return>(CToReactor<Arguments>...)>
+	{
+	public:
+		using BaseType = Function<CToReactor<Return>(CToReactor<Arguments>...)>;
+		using FunctionType = Return(Arguments...);
+
+		// Hide base implementations of operator()
+
+		RoutineT<FunctionType> operator()(const char* name, ...)
+		{
+			return RoutineT<FunctionType>(BaseType::operator()(name));
+		}
+
+		RoutineT<FunctionType> operator()(const Config::Edit& cfg, const char* name, ...)
+		{
+			return RoutineT<FunctionType>(BaseType::operator()(cfg, name));
+		}
+	};
+}
+
 int reference(int *p, int y)
 {
 	int x = p[-1];
@@ -38,10 +90,60 @@ int reference(int *p, int y)
 
 TEST(ReactorUnitTests, Sample)
 {
-	std::shared_ptr<Routine> routine;
+	{
+		FunctionT<int(int, int)> function;
+		FunctionT<Int(Int, Int)> function;
+		{
+			Int a = function.Arg<0>();
+			Int b = function.Arg<1>();
+			Return(a + b);
+		}
+
+		auto routine = function("one");
+		int result = routine(1, 2);
+		EXPECT_EQ(result, 3);
+	}
+
+	//std::shared_ptr<Routine> routine;
+
+	//{
+	//	Function<Int(Pointer<Int>, Int)> function;
+	//	{
+	//		Pointer<Int> p = function.Arg<0>();
+	//		Int x = p[-1];
+	//		Int y = function.Arg<1>();
+	//		Int z = 4;
+
+	//		For(Int i = 0, i < 10, i++)
+	//		{
+	//			z += (2 << i) - (i / 3);
+	//		}
+
+	//		Float4 v;
+	//		v.z = As<Float>(z);
+	//		z = As<Int>(Float(Float4(v.xzxx).y));
+
+	//		Int sum = x + y + z;
+
+	//		Return(sum);
+	//	}
+
+	//	routine = function("one");
+
+	//	if(routine)
+	//	{
+	//		auto callable2 = routine->getEntry<int(*)(float*, int)>();
+
+	//		auto callable = routine->getEntry<int(*)(int*, int)>();
+
+	//		int one[2] = {1, 0};
+	//		int result = callable(&one[1], 2);
+	//		EXPECT_EQ(result, reference(&one[1], 2));
+	//	}
+	//}
 
 	{
-		Function<Int(Pointer<Int>, Int)> function;
+		FunctionT<int(int*, int)> function;
 		{
 			Pointer<Int> p = function.Arg<0>();
 			Int x = p[-1];
@@ -62,18 +164,17 @@ TEST(ReactorUnitTests, Sample)
 			Return(sum);
 		}
 
-		routine = function("one");
+		auto routine = function("one");
 
-		if(routine)
+		//if(routine)
 		{
-			auto callable = routine->getEntry<int(*)(int*, int)>();
+			//auto callable = routine->getEntry<int(*)(int*, int)>();
 
 			int one[2] = {1, 0};
-			int result = callable(&one[1], 2);
+			int result = routine(&one[1], 2);
 			EXPECT_EQ(result, reference(&one[1], 2));
 		}
 	}
-
 }
 
 TEST(ReactorUnitTests, Uninitialized)
