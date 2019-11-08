@@ -1524,6 +1524,168 @@ TEST(ReactorUnitTests, Coroutines_Parameters)
 	EXPECT_EQ(out, 99);
 }
 
+//template <typename T>
+//struct CPrintValue2;
+//
+//template <>
+//struct CPrintValue2<CToReactor<float>>
+//{
+//	static void Exec(int id, float v)
+//	{
+//		printf("***[%d]: %f\n", id, v);
+//	}
+//};
+//
+//template <>
+//struct CPrintValue2<CToReactor<int>>
+//{
+//	static void Exec(int id, int v)
+//	{
+//		printf("***[%d]: %d\n", id, v);
+//	}
+//};
+//
+//template <>
+//struct CPrintValue2<Pointer<Float4>>
+//{
+//	static void Exec(int id, float* v)
+//	{
+//		printf("***[%d]: %f,%f,%f,%f\n", id, v[0], v[1], v[2], v[3]);
+//	}
+//};
+//
+//template <>
+//struct CPrintValue2<Pointer<Int4>>
+//{
+//	static void Exec(int id, int* v)
+//	{
+//		printf("***[%d]: %d,%d,%d,%d\n", id, v[0], v[1], v[2], v[3]);
+//	}
+//};
+//
+////template <typename T>
+////struct CPrintValue2<RValue<Pointer<T>>> : CPrintValue2<Pointer<T>>
+////{
+////};
+//
+//template <typename ReactorType>
+//void PrintValue2(Int id, const ReactorType& v)
+//{
+//	Call(CPrintValue2<ReactorType>::Exec, id, v);
+//}
+//
+//template <typename ReactorType>
+//void PrintValue2(Int id, const RValue<ReactorType>& v)
+//{
+//	ReactorType lv(v);
+//	Call(CPrintValue2<ReactorType>::Exec, id, lv);
+//}
+//
+//template <typename ReactorType>
+//void PrintValue2(Int id, const Reference<ReactorType>& v)
+//{
+//	ReactorType lv(v);
+//	Call(CPrintValue2<ReactorType>::Exec, id, lv);
+//}
+//
+//
+//void PrintNewLine()
+//{
+//	struct Foo
+//	{
+//		static void Bar() { puts(""); }
+//	};
+//
+//	Call(Foo::Bar);
+//}
+
+
+TEST(ReactorUnitTests, RValue)
+{
+	// Good
+	{
+		Function<Void(Pointer<Int4> values, Pointer<Int4> result)> function;
+		{
+			Pointer<Int4> vIn = function.Arg<0>();
+			Pointer<Int4> resultIn = function.Arg<1>();
+
+			//RValue<Int4> v = *vIn; // Fails
+			Int4 v = *vIn; // Works
+
+			Int4 result(678);
+
+			If(Extract(v, 0) == 42)
+			{
+				result = Insert(result, 1, 0);
+			}
+
+			If(Extract(v, 1) == 42)
+			{
+				result = Insert(result, 1, 1);
+			}
+
+			*resultIn = result;
+
+			Return();
+		}
+
+		auto routine = function("one");
+		auto entry = (void(*)(int*, int*))routine->getEntry();
+
+		{
+			int v[4] = { 42, 42, 42, 42 };
+			int result[4] = { 99,99,99,99 };
+			entry(v, result);
+			EXPECT_EQ(result[0], 1);
+			EXPECT_EQ(result[1], 1);
+			EXPECT_EQ(result[2], 678);
+			EXPECT_EQ(result[3], 678);
+		}
+	}
+
+	// Bad
+	{
+		Function<Void(Pointer<Int4> values, Pointer<Int4> result)> function;
+		{
+			Pointer<Int4> vIn = function.Arg<0>();
+			Pointer<Int4> resultIn = function.Arg<1>();
+
+			RValue<Int4> v = *vIn; // Fails
+			//Int4 v = *vIn; // Works
+
+			Int4 result(678);
+
+			If(Extract(v, 0) == 42)
+			{
+				result = Insert(result, 1, 0);
+			}
+
+			If(Extract(v, 1) == 42)
+			{
+				result = Insert(result, 1, 1);
+			}
+
+			*resultIn = result;
+
+			Return();
+		}
+
+		auto routine = function("one");
+		auto entry = (void(*)(int*, int*))routine->getEntry();
+
+		{
+			int v[4] = { 42, 42, 42, 42 };
+			int result[4] = { 99,99,99,99 };
+			entry(v, result);
+			EXPECT_EQ(result[0], 1);
+			EXPECT_EQ(result[1], 1);
+			EXPECT_EQ(result[2], 678);
+			EXPECT_EQ(result[3], 678);
+		}
+	}
+
+}
+
 int main(int argc, char **argv)
 {
 	::testing::InitGoogleTest(&argc, argv);
