@@ -62,7 +62,8 @@ namespace
 		// This uses a static in a function to avoid the cost of a global static
 		// initializer. See http://neugierig.org/software/chromium/notes/2011/08/static-initializers.html
 		static rr::Config config = rr::Config::Edit()
-			.set(rr::Optimization::Level::Default)
+			//.set(rr::Optimization::Level::Less)
+			.set(rr::Optimization::Level::Aggressive)
 			.apply({});
 		return config;
 	}
@@ -157,7 +158,7 @@ namespace
 	const bool emulateMismatchedBitCast = CPUID::ARM;
 
 	// Make sure to compile Subzero with ALLOW_DUMP = 1 if setting this to true
-	const bool subzeroDumpEnabled = false;
+	const bool subzeroDumpEnabled = true;
 }
 
 namespace rr
@@ -579,6 +580,8 @@ namespace rr
 		Flags.setApplicationBinaryInterface(Ice::ABI_Platform);
 		Flags.setVerbose(subzeroDumpEnabled ? Ice::IceV_Most : Ice::IceV_None);
 		Flags.setDisableHybridAssembly(true);
+
+		//Flags.setVerbose(Ice::IceV_Most|Ice::IceV_Liveness|Ice::IceV_LinearScan);
 
 		static llvm::raw_os_ostream cout(std::cout);
 		static llvm::raw_os_ostream cerr(std::cerr);

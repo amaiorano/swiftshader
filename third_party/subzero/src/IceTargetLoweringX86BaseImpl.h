@@ -534,6 +534,8 @@ template <typename TraitsType> void TargetX86Base<TraitsType>::translateO2() {
   if (SandboxingType != ST_None) {
     initSandbox();
   }
+
+#if 1
   Func->dump("After x86 codegen");
   splitBlockLocalVariables(Func);
 
@@ -562,6 +564,9 @@ template <typename TraitsType> void TargetX86Base<TraitsType>::translateO2() {
     Func->advancedPhiLowering();
     Func->dump("After advanced Phi lowering");
   }
+#else
+  regAlloc(RAK_InfOnly);
+#endif
 
   // Stack frame mapping.
   Func->genFrame();
