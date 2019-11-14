@@ -105,7 +105,10 @@ public:
 
   /// \name Manage instruction numbering.
   /// @{
-  InstNumberT newInstNumber() { return NextInstNumber++; }
+  InstNumberT newInstNumber() { 
+	  NextInstNumber = NextInstNumber;
+	  return NextInstNumber++; 
+  }
   InstNumberT getNextInstNumber() const { return NextInstNumber; }
   /// @}
 

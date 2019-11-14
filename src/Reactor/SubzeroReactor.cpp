@@ -53,6 +53,685 @@
 #include <limits>
 #include <iostream>
 
+namespace test
+{
+	#define __x86_64__ 1
+
+	template<typename P>
+	P unaligned_read(P* address)
+	{
+		P value;
+		memcpy(&value, address, sizeof(P));
+		return value;
+	}
+
+	template<typename P, typename V>
+	void unaligned_write(P* address, V value)
+	{
+		static_assert(sizeof(V) == sizeof(P), "value size must match pointee size");
+		memcpy(address, &value, sizeof(P));
+	}
+
+	template<typename P>
+	class unaligned_ref
+	{
+	public:
+		explicit unaligned_ref(void* ptr) : ptr((P*)ptr) {}
+
+		template<typename V>
+		P operator=(V value)
+		{
+			unaligned_write(ptr, value);
+			return value;
+		}
+
+		operator P()
+		{
+			return unaligned_read((P*)ptr);
+		}
+
+	private:
+		P* ptr;
+	};
+
+	template<typename P>
+	class unaligned_ptr
+	{
+		template<typename S>
+		friend class unaligned_ptr;
+
+	public:
+		unaligned_ptr(P* ptr) : ptr(ptr) {}
+
+		unaligned_ref<P> operator*()
+		{
+			return unaligned_ref<P>(ptr);
+		}
+
+		template<typename S>
+		operator S()
+		{
+			return S(ptr);
+		}
+
+	private:
+		void* ptr;
+	};
+
+	using ElfHeader = std::conditional<sizeof(void*) == 8, Elf64_Ehdr, Elf32_Ehdr>::type;
+	using SectionHeader = std::conditional<sizeof(void*) == 8, Elf64_Shdr, Elf32_Shdr>::type;
+
+	inline const SectionHeader* sectionHeader(const ElfHeader* elfHeader)
+	{
+		return reinterpret_cast<const SectionHeader*>((intptr_t)elfHeader + elfHeader->e_shoff);
+	}
+
+	inline const SectionHeader* elfSection(const ElfHeader* elfHeader, int index)
+	{
+		return &sectionHeader(elfHeader)[index];
+	}
+
+	static void* relocateSymbol(const ElfHeader* elfHeader, const Elf32_Rel& relocation, const SectionHeader& relocationTable)
+	{
+		const SectionHeader* target = elfSection(elfHeader, relocationTable.sh_info);
+
+		uint32_t index = relocation.getSymbol();
+		int table = relocationTable.sh_link;
+		void* symbolValue = nullptr;
+
+		if (index != SHN_UNDEF)
+		{
+			if (table == SHN_UNDEF) return nullptr;
+			const SectionHeader* symbolTable = elfSection(elfHeader, table);
+
+			uint32_t symtab_entries = symbolTable->sh_size / symbolTable->sh_entsize;
+			if (index >= symtab_entries)
+			{
+				ASSERT(index < symtab_entries && "Symbol Index out of range");
+				return nullptr;
+			}
+
+			intptr_t symbolAddress = (intptr_t)elfHeader + symbolTable->sh_offset;
+			Elf32_Sym& symbol = ((Elf32_Sym*)symbolAddress)[index];
+			uint16_t section = symbol.st_shndx;
+
+			if (section != SHN_UNDEF && section < SHN_LORESERVE)
+			{
+				const SectionHeader* target = elfSection(elfHeader, symbol.st_shndx);
+				symbolValue = reinterpret_cast<void*>((intptr_t)elfHeader + symbol.st_value + target->sh_offset);
+			}
+			else
+			{
+				return nullptr;
+			}
+		}
+
+		intptr_t address = (intptr_t)elfHeader + target->sh_offset;
+		unaligned_ptr<int32_t> patchSite = (int32_t*)(address + relocation.r_offset);
+
+		//if (CPUID::ARM)
+		//{
+		//	switch (relocation.getType())
+		//	{
+		//	case R_ARM_NONE:
+		//		// No relocation
+		//		break;
+		//	case R_ARM_MOVW_ABS_NC:
+		//	{
+		//		uint32_t thumb = 0;   // Calls to Thumb code not supported.
+		//		uint32_t lo = (uint32_t)(intptr_t)symbolValue | thumb;
+		//		*patchSite = (*patchSite & 0xFFF0F000) | ((lo & 0xF000) << 4) | (lo & 0x0FFF);
+		//	}
+		//	break;
+		//	case R_ARM_MOVT_ABS:
+		//	{
+		//		uint32_t hi = (uint32_t)(intptr_t)(symbolValue) >> 16;
+		//		*patchSite = (*patchSite & 0xFFF0F000) | ((hi & 0xF000) << 4) | (hi & 0x0FFF);
+		//	}
+		//	break;
+		//	default:
+		//		ASSERT(false && "Unsupported relocation type");
+		//		return nullptr;
+		//	}
+		//}
+		//else
+		{
+			switch (relocation.getType())
+			{
+			case R_386_NONE:
+				// No relocation
+				break;
+			case R_386_32:
+				*patchSite = (int32_t)((intptr_t)symbolValue + *patchSite);
+				break;
+			case R_386_PC32:
+				*patchSite = (int32_t)((intptr_t)symbolValue + *patchSite - (intptr_t)patchSite);
+				break;
+			default:
+				ASSERT(false && "Unsupported relocation type");
+				return nullptr;
+			}
+		}
+
+		return symbolValue;
+	}
+
+	static void* relocateSymbol(const ElfHeader* elfHeader, const Elf64_Rela& relocation, const SectionHeader& relocationTable)
+	{
+		const SectionHeader* target = elfSection(elfHeader, relocationTable.sh_info);
+
+		uint32_t index = relocation.getSymbol();
+		int table = relocationTable.sh_link;
+		void* symbolValue = nullptr;
+
+		if (index != SHN_UNDEF)
+		{
+			if (table == SHN_UNDEF) return nullptr;
+			const SectionHeader* symbolTable = elfSection(elfHeader, table);
+
+			uint32_t symtab_entries = symbolTable->sh_size / symbolTable->sh_entsize;
+			if (index >= symtab_entries)
+			{
+				ASSERT(index < symtab_entries && "Symbol Index out of range");
+				return nullptr;
+			}
+
+			intptr_t symbolAddress = (intptr_t)elfHeader + symbolTable->sh_offset;
+			Elf64_Sym& symbol = ((Elf64_Sym*)symbolAddress)[index];
+			uint16_t section = symbol.st_shndx;
+
+			if (section != SHN_UNDEF && section < SHN_LORESERVE)
+			{
+				const SectionHeader* target = elfSection(elfHeader, symbol.st_shndx);
+				symbolValue = reinterpret_cast<void*>((intptr_t)elfHeader + symbol.st_value + target->sh_offset);
+			}
+			else
+			{
+				return nullptr;
+			}
+		}
+
+		intptr_t address = (intptr_t)elfHeader + target->sh_offset;
+		unaligned_ptr<int32_t> patchSite32 = (int32_t*)(address + relocation.r_offset);
+		unaligned_ptr<int64_t> patchSite64 = (int64_t*)(address + relocation.r_offset);
+
+		switch (relocation.getType())
+		{
+		case R_X86_64_NONE:
+			// No relocation
+			break;
+		case R_X86_64_64:
+			*patchSite64 = (int64_t)((intptr_t)symbolValue + *patchSite64 + relocation.r_addend);
+			break;
+		case R_X86_64_PC32:
+			*patchSite32 = (int32_t)((intptr_t)symbolValue + *patchSite32 - (intptr_t)patchSite32 + relocation.r_addend);
+			break;
+		case R_X86_64_32S:
+			*patchSite32 = (int32_t)((intptr_t)symbolValue + *patchSite32 + relocation.r_addend);
+			break;
+		default:
+			ASSERT(false && "Unsupported relocation type");
+			return nullptr;
+		}
+
+		return symbolValue;
+	}
+
+	void* loadImage(uint8_t* const elfImage, size_t& codeSize)
+	{
+		ElfHeader* elfHeader = (ElfHeader*)elfImage;
+
+		if (!elfHeader->checkMagic())
+		{
+			return nullptr;
+		}
+
+		// Expect ELF bitness to match platform
+		ASSERT(sizeof(void*) == 8 ? elfHeader->getFileClass() == ELFCLASS64 : elfHeader->getFileClass() == ELFCLASS32);
+#if defined(__i386__)
+		ASSERT(sizeof(void*) == 4 && elfHeader->e_machine == EM_386);
+#elif defined(__x86_64__)
+		ASSERT(sizeof(void*) == 8 && elfHeader->e_machine == EM_X86_64);
+#elif defined(__arm__)
+		ASSERT(sizeof(void*) == 4 && elfHeader->e_machine == EM_ARM);
+#elif defined(__aarch64__)
+		ASSERT(sizeof(void*) == 8 && elfHeader->e_machine == EM_AARCH64);
+#elif defined(__mips__)
+		ASSERT(sizeof(void*) == 4 && elfHeader->e_machine == EM_MIPS);
+#else
+#error "Unsupported platform"
+#endif
+
+		SectionHeader* sectionHeader = (SectionHeader*)(elfImage + elfHeader->e_shoff);
+		void* entry = nullptr;
+
+		for (int i = 0; i < elfHeader->e_shnum; i++)
+		{
+			if (sectionHeader[i].sh_type == SHT_PROGBITS)
+			{
+				if (sectionHeader[i].sh_flags & SHF_EXECINSTR)
+				{
+					entry = elfImage + sectionHeader[i].sh_offset;
+					codeSize = sectionHeader[i].sh_size;
+				}
+			}
+			else if (sectionHeader[i].sh_type == SHT_REL)
+			{
+				ASSERT(sizeof(void*) == 4 && "UNIMPLEMENTED");   // Only expected/implemented for 32-bit code
+
+				for (Elf32_Word index = 0; index < sectionHeader[i].sh_size / sectionHeader[i].sh_entsize; index++)
+				{
+					const Elf32_Rel& relocation = ((const Elf32_Rel*)(elfImage + sectionHeader[i].sh_offset))[index];
+					relocateSymbol(elfHeader, relocation, sectionHeader[i]);
+				}
+			}
+			else if (sectionHeader[i].sh_type == SHT_RELA)
+			{
+				ASSERT(sizeof(void*) == 8 && "UNIMPLEMENTED");   // Only expected/implemented for 64-bit code
+
+				for (Elf32_Word index = 0; index < sectionHeader[i].sh_size / sectionHeader[i].sh_entsize; index++)
+				{
+					const Elf64_Rela& relocation = ((const Elf64_Rela*)(elfImage + sectionHeader[i].sh_offset))[index];
+					relocateSymbol(elfHeader, relocation, sectionHeader[i]);
+				}
+			}
+		}
+
+		return entry;
+	}
+
+	template<typename T>
+	struct ExecutableAllocator
+	{
+		ExecutableAllocator() {}
+		template<class U> ExecutableAllocator(const ExecutableAllocator<U>& other) {}
+
+		using value_type = T;
+		using size_type = std::size_t;
+
+		T* allocate(size_type n)
+		{
+			return (T*)rr::allocateExecutable(sizeof(T) * n);
+		}
+
+		void deallocate(T* p, size_type n)
+		{
+			rr::deallocateExecutable(p, sizeof(T) * n);
+		}
+	};
+
+	class ELFMemoryStreamer : public Ice::ELFStreamer//, public Routine
+	{
+		ELFMemoryStreamer(const ELFMemoryStreamer&) = delete;
+		ELFMemoryStreamer& operator=(const ELFMemoryStreamer&) = delete;
+
+	public:
+		ELFMemoryStreamer() : /*Routine(),*/ entry(nullptr)
+		{
+			position = 0;
+			buffer.reserve(0x1000);
+		}
+
+		~ELFMemoryStreamer() override
+		{
+#if defined(_WIN32)
+			if (buffer.size() != 0)
+			{
+				DWORD exeProtection;
+				VirtualProtect(&buffer[0], buffer.size(), oldProtection, &exeProtection);
+			}
+#endif
+		}
+
+		void write8(uint8_t Value) override
+		{
+			if (position == (uint64_t)buffer.size())
+			{
+				buffer.push_back(Value);
+				position++;
+			}
+			else if (position < (uint64_t)buffer.size())
+			{
+				buffer[position] = Value;
+				position++;
+			}
+			else ASSERT(false && "UNIMPLEMENTED");
+		}
+
+		void writeBytes(llvm::StringRef Bytes) override
+		{
+			std::size_t oldSize = buffer.size();
+			buffer.resize(oldSize + Bytes.size());
+			memcpy(&buffer[oldSize], Bytes.begin(), Bytes.size());
+			position += Bytes.size();
+		}
+
+		uint64_t tell() const override { return position; }
+
+		void seek(uint64_t Off) override { position = Off; }
+
+		const void* getEntry(int index)
+		{
+			ASSERT(index == 0); // Subzero does not support multiple entry points per routine yet.
+			if (!entry)
+			{
+				position = std::numeric_limits<std::size_t>::max();   // Can't stream more data after this
+
+				size_t codeSize = 0;
+				entry = loadImage(&buffer[0], codeSize);
+
+#if defined(_WIN32)
+				VirtualProtect(&buffer[0], buffer.size(), PAGE_EXECUTE_READ, &oldProtection);
+				FlushInstructionCache(GetCurrentProcess(), NULL, 0);
+#else
+				mprotect(&buffer[0], buffer.size(), PROT_READ | PROT_EXEC);
+				__builtin___clear_cache((char*)entry, (char*)entry + codeSize);
+#endif
+			}
+
+			return entry;
+		}
+
+	private:
+		void* entry;
+		std::vector<uint8_t, ExecutableAllocator<uint8_t>> buffer;
+		std::size_t position;
+
+#if defined(_WIN32)
+		DWORD oldProtection;
+#endif
+	};
+
+	Ice::Variable* allocateStackVariable(Ice::GlobalContext* context, Ice::Cfg* function, Ice::Type type)
+	{
+		int typeSize = Ice::typeWidthInBytes(type);
+
+		Ice::ConstantInteger32* bytes = Ice::ConstantInteger32::create(context, type, typeSize);
+		Ice::Variable* address = function->makeVariable(Ice::IceType_i64);
+		Ice::InstAlloca* alloca = Ice::InstAlloca::create(function, address, bytes, typeSize);
+		function->getEntryNode()->getInsts().push_front(alloca);
+
+		return address;
+	}
+
+	void createStore(Ice::Cfg* function, Ice::CfgNode* basicBlock, Ice::Variable* value, Ice::Variable* ptr, uint32_t align = 0)
+	{
+		Ice::InstStore* store = Ice::InstStore::create(function, value, ptr, align);
+		basicBlock->appendInst(store);
+	}
+
+	Ice::Variable* createLoad(Ice::Cfg* function, Ice::CfgNode* basicBlock, Ice::Variable* ptr, Ice::Type type, uint32_t align = 0)
+	{
+		Ice::Variable* result = function->makeVariable(type);
+		Ice::InstLoad* load = Ice::InstLoad::create(function, result, ptr, align);
+		basicBlock->appendInst(load);
+		return result;
+	}
+
+	Ice::Variable* createConstantVector(Ice::GlobalContext* context, Ice::Cfg* function, Ice::CfgNode* basicBlock, const int64_t* constants, Ice::Type type)
+	{
+		const int vectorSize = 16;
+		const int alignment = vectorSize;
+		auto globalPool = function->getGlobalPool();
+
+		const int64_t* i = constants;
+		const double* f = reinterpret_cast<const double*>(constants);
+		Ice::VariableDeclaration::DataInitializer* dataInitializer = nullptr;
+
+		switch (type)
+		{
+		case Ice::IceType_v4i32:
+		case Ice::IceType_v4i1:
+		{
+			const int initializer[4] = { (int)i[0], (int)i[1], (int)i[2], (int)i[3] };
+			static_assert(sizeof(initializer) == vectorSize, "!");
+			dataInitializer = Ice::VariableDeclaration::DataInitializer::create(globalPool, (const char*)initializer, vectorSize);
+		}
+		break;
+		default:
+			assert(false);
+		}
+
+		//auto name = Ice::GlobalString::createWithoutString(context);
+		auto name = Ice::GlobalString::createWithString(context, "constantVec");
+		auto* variableDeclaration = Ice::VariableDeclaration::create(globalPool);
+		variableDeclaration->setName(name);
+		variableDeclaration->setAlignment(alignment);
+		variableDeclaration->setIsConstant(true);
+		variableDeclaration->addInitializer(dataInitializer);
+
+		function->addGlobal(variableDeclaration);
+
+		constexpr int32_t offset = 0;
+		Ice::Operand* ptr = context->getConstantSym(offset, name);
+
+		Ice::Variable* result = function->makeVariable(type);
+		auto load = Ice::InstLoad::create(function, result, ptr, alignment);
+		basicBlock->appendInst(load);
+
+		return result;
+	}
+
+	Ice::Variable* createExtractElement(Ice::GlobalContext* context, Ice::Cfg* function, Ice::CfgNode* basicBlock, Ice::Operand* vector, Ice::Type type, int index)
+	{
+		auto result = function->makeVariable(type);
+		auto extract = Ice::InstExtractElement::create(function, result, vector, context->getConstantInt32(index));
+		basicBlock->appendInst(extract);
+		return result;
+	}
+
+	Ice::Variable* createInsertElement(Ice::GlobalContext* context, Ice::Cfg* function, Ice::CfgNode* basicBlock, Ice::Operand* vector, Ice::Operand* element, int index)
+	{
+		auto result = function->makeVariable(vector->getType());
+		auto insert = Ice::InstInsertElement::create(function, result, vector, element, context->getConstantInt32(index));
+		basicBlock->appendInst(insert);
+
+		return result;
+	}
+
+	Ice::Variable* createIntCompare(Ice::Cfg* function, Ice::CfgNode* basicBlock, Ice::InstIcmp::ICond condition, Ice::Operand* lhs, Ice::Operand* rhs)
+	{
+		ASSERT(lhs->getType() == rhs->getType());
+
+		auto result = function->makeVariable(Ice::isScalarIntegerType(lhs->getType()) ? Ice::IceType_i1 : lhs->getType());
+		auto cmp = Ice::InstIcmp::create(function, condition, result, lhs, rhs);
+		basicBlock->appendInst(cmp);
+
+		return result;
+	}
+
+	void createBr(Ice::Cfg* function, Ice::CfgNode* basicBlock, Ice::CfgNode* dest)
+	{
+		auto br = Ice::InstBr::create(function, dest);
+		basicBlock->appendInst(br);
+	}
+
+	void createCondBr(Ice::Cfg* function, Ice::CfgNode* basicBlock, Ice::Variable* cond, Ice::CfgNode* ifTrue, Ice::CfgNode* ifFalse)
+	{
+		auto br = Ice::InstBr::create(function, cond, ifTrue, ifFalse);
+		basicBlock->appendInst(br);
+	}
+
+	void createRetVoid(Ice::Cfg* function, Ice::CfgNode* basicBlock)
+	{
+		Ice::InstRet* ret = Ice::InstRet::create(function);
+		basicBlock->appendInst(ret);
+	}
+
+	void emitFunction(Ice::GlobalContext* context, Ice::Cfg* function)
+	{
+		function->setFunctionName(Ice::GlobalString::createWithString(context, "one"));
+
+		//rr::optimize(function);
+
+		function->translate();
+		ASSERT(!function->hasError());
+
+		auto globals = function->getGlobalInits();
+
+		if (globals && !globals->empty())
+		{
+			context->getGlobals()->merge(globals.get());
+		}
+
+		context->emitFileHeader();
+		function->emitIAS();
+		auto assembler = function->releaseAssembler();
+		auto objectWriter = context->getObjectWriter();
+		assembler->alignFunction();
+		objectWriter->writeFunctionCode(function->getFunctionName(), false, assembler.get());
+		context->lowerGlobals("last");
+		context->lowerConstants();
+		context->lowerJumpTables();
+		objectWriter->setUndefinedSyms(context->getConstantExternSyms());
+		objectWriter->writeNonUserSections();
+	}
+
+
+	// Function<Void(Pointer<Int4> values, Pointer<Int4> result)> function;
+	const void* createFunction()
+	{
+		Ice::ClFlags& Flags = Ice::ClFlags::Flags;
+		//Ice::ClFlags::getParsedClFlags(Flags);
+
+		Flags.setTargetArch(Ice::Target_X8664);
+		Flags.setTargetInstructionSet(Ice::X86InstructionSet_SSE4_1);
+		Flags.setOutFileType(Ice::FT_Elf);
+		Flags.setOptLevel(Ice::Opt_2);
+		Flags.setApplicationBinaryInterface(Ice::ABI_Platform);
+		Flags.setVerbose(Ice::IceV_None);//Ice::IceV_Most);
+		Flags.setDisableHybridAssembly(true);
+
+		static llvm::raw_os_ostream cout(std::cout);
+		static llvm::raw_os_ostream cerr(std::cerr);
+
+		ELFMemoryStreamer* elfMemory = new ELFMemoryStreamer();
+		Ice::GlobalContext* context = new Ice::GlobalContext(&cout, &cout, &cerr, elfMemory);
+
+		uint32_t sequenceNumber = 0;
+		auto function = Ice::Cfg::create(context, sequenceNumber).release();
+		auto allocator = new Ice::CfgLocalAllocatorScope(function);
+
+
+		// arg1 : Int4* values
+		// arg2 : Int4* result
+		//Ice::Variable* arg0 = function->makeVariable(Ice::IceType_i64);
+		//function->addArg(arg0);
+		//Ice::Variable* arg1 = function->makeVariable(Ice::IceType_i64);
+		//function->addArg(arg1);
+
+		Ice::CfgNode* node = function->makeNode();
+		function->setEntryNode(node);
+		Ice::CfgNode* basicBlock = node;
+
+
+		//// Pointer<Int4> vIn = function.Arg<0>();
+		//Ice::Variable* vIn = allocateStackVariable(context, function, Ice::IceType_i64);
+		//createStore(function, basicBlock, arg0, vIn);
+
+		//// Pointer<Int4> resultIn = function.Arg<1>();
+		//Ice::Variable* resultIn = allocateStackVariable(context, function, Ice::IceType_i64);
+		//createStore(function, basicBlock, arg1, resultIn);
+
+		//// RValue<Int4> v = *vIn;
+		//Ice::Variable* rv = createLoad(function, basicBlock, vIn, Ice::IceType_i64); // ref
+		//Ice::Variable* v = createLoad(function, basicBlock, rv, Ice::IceType_v4i32); // de-ref
+
+		// Int4 result(678);
+		int64_t constantVector[4] = { 678, 678, 678, 678 };
+		Ice::Variable* initValue = createConstantVector(context, function, basicBlock, constantVector, Ice::IceType_v4i32);
+		Ice::Variable* pResult = allocateStackVariable(context, function, Ice::IceType_v4i32);
+		createStore(function, basicBlock, initValue, pResult);
+
+		{
+			//// RValue<Int> e1 = Extract(v, 0);
+			//Ice::Variable* e1 = createExtractElement(context, function, basicBlock, v, Ice::IceType_i32, 0);
+
+			//// If(e1 == 42)
+			//Ice::Constant* c42 = context->getConstantInt32(42);
+			//Ice::Variable* condition = createIntCompare(function, basicBlock, Ice::InstIcmp::Eq, e1, c42);
+
+			//Ice::CfgNode* trueBB = function->makeNode();
+			//Ice::CfgNode* endBB = function->makeNode();
+
+			//// {
+			////     result = Insert(result, 1, 0);
+			//// }
+			//{
+			//	Ice::Constant* c1 = context->getConstantInt32(1);
+			//	// Load result and insert into it
+			//	Ice::Variable* result = createLoad(function, trueBB, pResult, Ice::IceType_v4i32);
+			//	Ice::Variable* newResult = createInsertElement(context, function, trueBB, result, c1, 0);
+			//	createStore(function, trueBB, newResult, pResult);
+
+			//	createBr(function, trueBB, endBB);
+
+			//	// Add condition to initial basicBlock. After this, endBB becomes the current basicBlock
+			//	createCondBr(function, basicBlock, condition, trueBB, endBB);
+			//	basicBlock = endBB;
+			//}
+		}
+
+
+		//{
+		//	// RValue<Int> e2 = Extract(v, 1);
+		//	Ice::Variable* e2 = createExtractElement(context, function, basicBlock, v, Ice::IceType_i32, 1);
+
+		//	// If(e2 == 42)
+		//	Ice::Constant* c42 = context->getConstantInt32(42);
+		//	Ice::Variable* condition = createIntCompare(function, basicBlock, Ice::InstIcmp::Eq, e2, c42);
+
+		//	Ice::CfgNode* trueBB = function->makeNode();
+		//	Ice::CfgNode* endBB = function->makeNode();
+
+		//	// {
+		//	//     result = Insert(result, 1, 1);
+		//	// }
+		//	{
+		//		Ice::Constant* c1 = context->getConstantInt32(1);
+		//		// Load result and insert into it
+		//		Ice::Variable* result = createLoad(function, trueBB, pResult, Ice::IceType_v4i32);
+		//		Ice::Variable* newResult = createInsertElement(context, function, trueBB, result, c1, 1);
+		//		createStore(function, trueBB, newResult, pResult);
+
+		//		createBr(function, trueBB, endBB);
+
+		//		// Add condition to initial basicBlock. After this, endBB becomes the current basicBlock
+		//		createCondBr(function, basicBlock, condition, trueBB, endBB);
+		//		basicBlock = endBB;
+		//	}
+		//}
+
+		//// *resultIn = result;
+		//{
+		//	Ice::Variable* result = createLoad(function, basicBlock, pResult, Ice::IceType_v4i32);
+		//	createStore(function, basicBlock, result, resultIn);
+		//}
+
+		// Return()
+		createRetVoid(function, basicBlock);
+
+		// Emit function and return entry point
+		emitFunction(context, function);
+		return elfMemory->getEntry(0);
+	}
+}
+
+void foo()
+{
+	auto entry = (void(*)(int*, int*))test::createFunction();
+	{
+		int v[4] = { 42, 42, 42, 42 };
+		int result[4] = { 99,99,99,99 };
+		entry(v, result);
+		//EXPECT_EQ(result[0], 1);
+		//EXPECT_EQ(result[1], 1);
+		//EXPECT_EQ(result[2], 678);
+		//EXPECT_EQ(result[3], 678);
+	}
+}
+
+
 namespace
 {
 	// Default configuration settings. Must be accessed under mutex lock.
@@ -3563,3 +4242,16 @@ namespace rr
 	void Nucleus::yield(Value* val) { UNIMPLEMENTED("Yield"); }
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
