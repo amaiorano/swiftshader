@@ -93,8 +93,9 @@ namespace
 	{
 		switch (level)
 		{
-			case rr::Optimization::Level::None:       return Ice::Opt_0;
-			case rr::Optimization::Level::Less:       return Ice::Opt_1;
+			// Note that Opt_0 and Opt_1 are not implemented by Subzero
+			case rr::Optimization::Level::None:       return Ice::Opt_m1;
+			case rr::Optimization::Level::Less:       return Ice::Opt_m1;
 			case rr::Optimization::Level::Default:    return Ice::Opt_2;
 			case rr::Optimization::Level::Aggressive: return Ice::Opt_2;
 			default: UNREACHABLE("Unknown Optimization Level %d", int(level));
@@ -154,6 +155,9 @@ namespace
 	const bool CPUID::SSE4_1 = CPUID::detectSSE4_1();
 	const bool emulateIntrinsics = false;
 	const bool emulateMismatchedBitCast = CPUID::ARM;
+
+	// Make sure to compile Subzero with ALLOW_DUMP = 1 if setting this to true
+	const bool subzeroDumpEnabled = false;
 }
 
 namespace rr
@@ -573,7 +577,7 @@ namespace rr
 		Flags.setOutFileType(Ice::FT_Elf);
 		Flags.setOptLevel(toIce(getDefaultConfig().getOptimization().getLevel()));
 		Flags.setApplicationBinaryInterface(Ice::ABI_Platform);
-		Flags.setVerbose(false ? Ice::IceV_Most : Ice::IceV_None);
+		Flags.setVerbose(subzeroDumpEnabled ? Ice::IceV_Most : Ice::IceV_None);
 		Flags.setDisableHybridAssembly(true);
 
 		static llvm::raw_os_ostream cout(std::cout);
@@ -629,6 +633,12 @@ namespace rr
 
 	std::shared_ptr<Routine> Nucleus::acquireRoutine(const char *name, const Config::Edit &cfgEdit /* = Config::Edit::None */)
 	{
+		if (subzeroDumpEnabled)
+		{
+			// Output dump strings immediately, rather than once buffer is full. Useful for debugging.
+			context->getStrDump().SetUnbuffered();
+		}
+
 		if(basicBlock->getInsts().empty() || basicBlock->getInsts().back().getKind() != Ice::Inst::Ret)
 		{
 			createRetVoid();
@@ -1584,7 +1594,8 @@ namespace rr
 			UNREACHABLE("Unknown constant vector type: %d", (int)reinterpret_cast<intptr_t>(type));
 		}
 
-		auto name = Ice::GlobalString::createWithoutString(::context);
+		// Provide a name so that Subzero dump doesn't assert on name with invalid ID
+		auto name = Ice::GlobalString::createWithString(::context, "constantVector");
 		auto *variableDeclaration = Ice::VariableDeclaration::create(globalPool);
 		variableDeclaration->setName(name);
 		variableDeclaration->setAlignment(alignment);
