@@ -1688,6 +1688,12 @@ TEST(ReactorUnitTests, RValue)
 
 int main(int argc, char **argv)
 {
+	// Hack to get extra arg to ptest
+	std::string regAllocCandidateString = argc > 2 ? argv[argc-1] : "";
+	argc = argc > 2 ? argc - 1 : argc;
+	extern std::string GlobalRegAllocCandidateString;
+	GlobalRegAllocCandidateString = regAllocCandidateString;
+
 	::testing::InitGoogleTest(&argc, argv);
 	return RUN_ALL_TESTS();
 }

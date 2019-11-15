@@ -53,6 +53,8 @@
 #include <limits>
 #include <iostream>
 
+std::string GlobalRegAllocCandidateString;
+
 namespace
 {
 	// Default configuration settings. Must be accessed under mutex lock.
@@ -563,7 +565,11 @@ namespace rr
 		::codegenMutex.lock();   // Reactor is currently not thread safe
 
 		Ice::ClFlags &Flags = Ice::ClFlags::Flags;
+		
+		Flags.setRegAllocCandidate(GlobalRegAllocCandidateString);
+		
 		Ice::ClFlags::getParsedClFlags(Flags);
+
 
 		#if defined(__arm__)
 			Flags.setTargetArch(Ice::Target_ARM32);
