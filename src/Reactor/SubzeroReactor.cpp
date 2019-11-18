@@ -588,7 +588,8 @@ namespace rr
 		Flags.setVerbose(subzeroDumpEnabled ? Ice::IceV_Most : Ice::IceV_None);
 		Flags.setDisableHybridAssembly(true);
 
-		//Flags.setVerbose(Ice::IceV_Most|Ice::IceV_Liveness|Ice::IceV_LinearScan);
+		Flags.setVerbose(Ice::IceV_Most|Ice::IceV_Liveness|Ice::IceV_LinearScan);
+		Flags.setSplitGlobalVars(true);
 
 		static llvm::raw_os_ostream cout(std::cout);
 		static llvm::raw_os_ostream cerr(std::cerr);

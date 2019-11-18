@@ -519,6 +519,7 @@ template <typename TraitsType> void TargetX86Base<TraitsType>::translateO2() {
   // i.e. livenessLightweight(). However, for some reason that slows down the
   // rest of the translation. Investigate.
   Func->liveness(Liveness_Basic);
+  //Func->livenessLightweight();
   if (Func->hasError())
     return;
   Func->dump("After x86 address mode opt");
@@ -535,7 +536,8 @@ template <typename TraitsType> void TargetX86Base<TraitsType>::translateO2() {
     initSandbox();
   }
 
-#if 1
+#define DO_OPTIMAL_REGALLOC 1
+#if DO_OPTIMAL_REGALLOC
   Func->dump("After x86 codegen");
   splitBlockLocalVariables(Func);
 
