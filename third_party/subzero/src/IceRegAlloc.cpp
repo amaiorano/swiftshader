@@ -129,14 +129,6 @@ void LinearScan::initForGlobal() {
     if (Var->getLiveRange().isEmpty())
       continue;
     Var->untrimLiveRange();
-
-    // If matches RangeSpec variable number, variable is considered for register allocation
-    const bool hasInfWeight = Var->getWeight(Func).getWeight() == RegWeight::Inf;
-    const bool isPrecolored = Var->hasReg();
-    const bool isRegAllocCandidate = getFlags().matchRegAllocCandidate(Var->getIndex());
-    if (!hasInfWeight && !isPrecolored && !isRegAllocCandidate)
-        continue;
-
     Unhandled.push_back(Var);
     if (Var->hasReg()) {
       Var->setRegNumTmp(Var->getRegNum());

@@ -181,13 +181,6 @@ public:
   bool matchVerboseFocusOn(const std::string &Name, uint32_t Number) const {
     return VerboseFocus.match(Name, Number);
   }
-  bool matchRegAllocCandidate(uint32_t VariableNumer) const {
-	  return RegAllocCandidate.match("", VariableNumer);
-  }
-
-  void setRegAllocCandidate(const std::string& VariableNumber) {
-	  RegAllocCandidate.init(VariableNumber);
-  }
 
 private:
   std::string AppName;
@@ -201,7 +194,6 @@ private:
   RangeSpec TimingFocus;
   RangeSpec TranslateOnly;
   RangeSpec VerboseFocus;
-  RangeSpec RegAllocCandidate;
 };
 
 inline const ClFlags &getFlags() { return ClFlags::Flags; }
