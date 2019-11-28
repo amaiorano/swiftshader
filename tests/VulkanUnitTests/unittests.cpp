@@ -207,7 +207,7 @@ std::vector<uint32_t> compileSpirv(const char* assembly)
     // if the SSA names (%X) in the debugger do not match the source.
     std::string disassembled;
     core.Disassemble(spirv, &disassembled, SPV_BINARY_TO_TEXT_OPTION_NO_HEADER);
-    if (disassembled != assembly)
+    if (false/*disassembled != assembly*/)
     {
         printf("-- WARNING: Disassembly does not match assembly: ---\n\n");
 
@@ -266,6 +266,288 @@ public:
         std::function<uint32_t(uint32_t idx)> input,
         std::function<uint32_t(uint32_t idx)> expected);
 };
+
+
+static void graphicsTest(const std::string& shader)
+{
+	auto code = compileSpirv(shader.c_str());
+
+	Driver driver;
+	ASSERT_TRUE(driver.loadSwiftShader());
+
+	const VkInstanceCreateInfo createInfo = {
+		VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,  // sType
+		nullptr,                                 // pNext
+		0,                                       // flags
+		nullptr,                                 // pApplicationInfo
+		0,                                       // enabledLayerCount
+		nullptr,                                 // ppEnabledLayerNames
+		0,                                       // enabledExtensionCount
+		nullptr,                                 // ppEnabledExtensionNames
+	};
+
+	VkInstance instance = VK_NULL_HANDLE;
+	VK_ASSERT(driver.vkCreateInstance(&createInfo, nullptr, &instance));
+
+	ASSERT_TRUE(driver.resolve(instance));
+
+	const static VkFormat kDepthFormat = VK_FORMAT_D16_UNORM;
+
+	std::unique_ptr<Device> device;
+	VkSurfaceFormatKHR surface_format{};
+	VK_ASSERT(Device::CreateGraphicsDevice(&driver, instance, device, surface_format));
+	ASSERT_TRUE(device->IsValid());
+
+	VkShaderModule vertextShaderModule;
+	VK_ASSERT(device->CreateShaderModule(code, &vertextShaderModule));
+
+
+	VkPipelineShaderStageCreateInfo stage_infos[] = {
+		VkPipelineShaderStageCreateInfo{
+		VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0,
+		VK_SHADER_STAGE_VERTEX_BIT, vertextShaderModule, "main", nullptr},
+		//VkPipelineShaderStageCreateInfo{}
+	};
+
+
+	VkVertexInputBindingDescription bindings{0, 8 * sizeof(float),
+		VK_VERTEX_INPUT_RATE_VERTEX};
+
+	VkVertexInputAttributeDescription attributes[3]{
+		VkVertexInputAttributeDescription{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
+		VkVertexInputAttributeDescription{1, 0, VK_FORMAT_R32G32_SFLOAT,
+		3 * sizeof(float)},
+		VkVertexInputAttributeDescription{2, 0, VK_FORMAT_R32G32B32_SFLOAT,
+		(3 + 2) * sizeof(float)}};
+
+	VkPipelineVertexInputStateCreateInfo vertex_create_info{
+		VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		nullptr,
+		0,
+		1,
+		&bindings,
+		3,
+		attributes};
+
+	VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info{
+		VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+		nullptr,
+		0,
+		VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+		false,
+	};
+
+	VkPipelineRasterizationStateCreateInfo rasterization_state_create_info{
+		VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		nullptr,
+		0,
+		false,
+		false,
+		VK_POLYGON_MODE_FILL,
+		VK_CULL_MODE_BACK_BIT,
+		VK_FRONT_FACE_CLOCKWISE,
+		false,
+		0.0f,
+		0.0f,
+		0.0f,
+		1.0f};
+
+	VkDescriptorSetLayout descriptor_set_layout{};
+	{
+		VkDescriptorSetLayoutBinding bindings[3] = {
+			VkDescriptorSetLayoutBinding{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr},
+			//VkDescriptorSetLayoutBinding{1, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
+			//VkDescriptorSetLayoutBinding{2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
+		};
+		VkDescriptorSetLayoutCreateInfo create_info{
+			VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO, nullptr, 0, std::size(bindings),
+			bindings};
+
+		driver.vkCreateDescriptorSetLayout(device->Handle(), &create_info, nullptr,
+			&descriptor_set_layout);
+	}
+
+	VkPipelineLayout pipeline_layout{};
+	{
+		VkPipelineLayoutCreateInfo create_info{
+			VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			nullptr,
+			0,
+			1,
+			&descriptor_set_layout,
+			0,
+			nullptr};
+		driver.vkCreatePipelineLayout(device->Handle(), &create_info, nullptr,
+			&pipeline_layout);
+	}
+
+	VkRenderPass render_pass{};
+	{
+		VkAttachmentDescription attachments[2] = {
+			VkAttachmentDescription{
+			0,
+			surface_format.format,
+			VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		},
+		VkAttachmentDescription{
+			0, kDepthFormat, VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL}};
+
+		VkAttachmentReference color_attachment{
+			0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL};
+		VkAttachmentReference depth_attachment{
+			1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+
+		VkSubpassDescription subpass{0,       VK_PIPELINE_BIND_POINT_GRAPHICS,
+			0,       nullptr,
+			1,       &color_attachment,
+			nullptr, &depth_attachment,
+			0,       nullptr};
+
+		VkRenderPassCreateInfo create_info{
+			VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+			nullptr,
+			0,
+			2,
+			attachments,
+			1,
+			&subpass,
+			0,
+			nullptr};
+
+		driver.vkCreateRenderPass(device->Handle(), &create_info, nullptr, &render_pass);
+	}
+
+	VkGraphicsPipelineCreateInfo create_info{
+		VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+		nullptr,
+		0,
+		std::size(stage_infos),
+		stage_infos,
+		&vertex_create_info,
+		&input_assembly_create_info,
+		nullptr,
+		nullptr,//&viewport_state_create_info,
+		&rasterization_state_create_info,
+		nullptr,//&multisample_state_create_info,
+		nullptr,//&depth_stencil_state_create_info,
+		nullptr,//&color_blend_state_create_info,
+		nullptr,
+		pipeline_layout,
+		render_pass,
+		0,
+		VK_NULL_HANDLE,
+		0};
+
+	VkPipeline graphicsPipeline{};
+	driver.vkCreateGraphicsPipelines(device->Handle(), VK_NULL_HANDLE, 1, &create_info, nullptr, &graphicsPipeline);
+
+
+	//std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings =
+	//{
+	//	{
+	//		0,                                  // binding
+	//		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // descriptorType
+	//		1,                                  // descriptorCount
+	//		VK_SHADER_STAGE_COMPUTE_BIT,        // stageFlags
+	//		0,                                  // pImmutableSamplers
+	//	},
+	//	{
+	//		1,                                  // binding
+	//		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // descriptorType
+	//		1,                                  // descriptorCount
+	//		VK_SHADER_STAGE_COMPUTE_BIT,        // stageFlags
+	//		0,                                  // pImmutableSamplers
+	//	}
+	//};
+
+	//VkDescriptorSetLayout descriptorSetLayout;
+	//VK_ASSERT(device->CreateDescriptorSetLayout(descriptorSetLayoutBindings, &descriptorSetLayout));
+
+	//VkPipelineLayout pipelineLayout;
+	//VK_ASSERT(device->CreatePipelineLayout(descriptorSetLayout, &pipelineLayout));
+
+	//VkPipeline pipeline;
+	//VK_ASSERT(device->CreateComputePipeline(shaderModule, pipelineLayout, &pipeline));
+
+	//VkDescriptorPool descriptorPool;
+	//VK_ASSERT(device->CreateStorageBufferDescriptorPool(2, &descriptorPool));
+
+	//VkDescriptorSet descriptorSet;
+	//VK_ASSERT(device->AllocateDescriptorSet(descriptorPool, descriptorSetLayout, &descriptorSet));
+
+	//std::vector<VkDescriptorBufferInfo> descriptorBufferInfos =
+	//{
+	//	{
+	//		bufferIn,       // buffer
+	//		0,              // offset
+	//		VK_WHOLE_SIZE,  // range
+	//	},
+	//	{
+	//		bufferOut,      // buffer
+	//		0,              // offset
+	//		VK_WHOLE_SIZE,  // range
+	//	}
+	//};
+	//device->UpdateStorageBufferDescriptorSets(descriptorSet, descriptorBufferInfos);
+
+	//VkCommandPool commandPool;
+	//VK_ASSERT(device->CreateCommandPool(&commandPool));
+
+	//VkCommandBuffer commandBuffer;
+	//VK_ASSERT(device->AllocateCommandBuffer(commandPool, &commandBuffer));
+
+	//VK_ASSERT(device->BeginCommandBuffer(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, commandBuffer));
+
+	//driver.vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+
+	//driver.vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipelineLayout, 0, 1, &descriptorSet,
+	//	0, nullptr);
+
+	//driver.vkCmdDispatch(commandBuffer, numElements / GetParam().localSizeX, 1, 1);
+
+	//VK_ASSERT(driver.vkEndCommandBuffer(commandBuffer));
+
+	//VK_ASSERT(device->QueueSubmitAndWait(commandBuffer));
+
+	//VK_ASSERT(device->MapMemory(memory, 0, buffersSize, 0, (void**)&buffers));
+
+	//for (size_t i = 0; i < numElements; ++i)
+	//{
+	//	auto got = buffers[i + outOffset];
+	//	EXPECT_EQ(expected(i), got) << "Unexpected output at " << i;
+	//}
+
+	//// Check for writes outside of bounds.
+	//EXPECT_EQ(buffers[magic0Offset], magic0);
+	//EXPECT_EQ(buffers[magic1Offset], magic1);
+	//EXPECT_EQ(buffers[magic2Offset], magic2);
+	//EXPECT_EQ(buffers[magic3Offset], magic3);
+
+	//device->UnmapMemory(memory);
+	//buffers = nullptr;
+
+	//device->FreeCommandBuffer(commandPool, commandBuffer);
+	//device->FreeMemory(memory);
+	//device->DestroyPipeline(pipeline);
+	//device->DestroyCommandPool(commandPool);
+	//device->DestroyPipelineLayout(pipelineLayout);
+	//device->DestroyDescriptorSetLayout(descriptorSetLayout);
+	//device->DestroyDescriptorPool(descriptorPool);
+	//device->DestroyBuffer(bufferIn);
+	//device->DestroyBuffer(bufferOut);
+	//device->DestroyShaderModule(shaderModule);
+	//device.reset(nullptr);
+	//driver.vkDestroyInstance(instance, nullptr);
+}
 
 void SwiftShaderVulkanBufferToBufferComputeTest::test(
         const std::string& shader,
@@ -590,6 +872,117 @@ TEST_P(SwiftShaderVulkanBufferToBufferComputeTest, GlobalInvocationId)
 
     // gl_GlobalInvocationId.y and gl_GlobalInvocationId.z should both be zero.
     test(src.str(), [](uint32_t i) { return i; }, [](uint32_t i) { return i; });
+}
+
+TEST_F(SwiftShaderVulkanTest, SwangleThing)
+{
+	std::stringstream src;
+	src << 
+R"shader(OpCapability Shader
+%1 = OpExtInstImport "GLSL.std.450"
+OpMemoryModel Logical GLSL450
+OpEntryPoint Vertex %4 "main" %10 %12 %19 %23
+OpSource GLSL 450
+OpName %4 "main"
+OpName %10 "_uvar"
+OpName %12 "_uin0"
+OpName %17 "gl_PerVertex"
+OpMemberName %17 0 "gl_Position"
+OpMemberName %17 1 "gl_PointSize"
+OpMemberName %17 2 "gl_ClipDistance"
+OpMemberName %17 3 "gl_CullDistance"
+OpName %19 ""
+OpName %23 "_udEQP_Position"
+OpName %40 "ANGLEDepthRangeParams"
+OpMemberName %40 0 "near"
+OpMemberName %40 1 "far"
+OpMemberName %40 2 "diff"
+OpMemberName %40 3 "dummyPacker"
+OpName %41 "ANGLEUniformBlock"
+OpMemberName %41 0 "viewport"
+OpMemberName %41 1 "halfRenderAreaHeight"
+OpMemberName %41 2 "viewportYScale"
+OpMemberName %41 3 "negViewportYScale"
+OpMemberName %41 4 "xfbActiveUnpaused"
+OpMemberName %41 5 "xfbBufferOffsets"
+OpMemberName %41 6 "acbBufferOffsets"
+OpMemberName %41 7 "depthRange"
+OpName %43 "ANGLEUniforms"
+OpDecorate %10 Location 0
+OpDecorate %12 Location 1
+OpMemberDecorate %17 0 BuiltIn Position
+OpMemberDecorate %17 1 BuiltIn PointSize
+OpMemberDecorate %17 2 BuiltIn ClipDistance
+OpMemberDecorate %17 3 BuiltIn CullDistance
+OpDecorate %17 Block
+OpDecorate %23 Location 0
+OpMemberDecorate %40 0 Offset 0
+OpMemberDecorate %40 1 Offset 4
+OpMemberDecorate %40 2 Offset 8
+OpMemberDecorate %40 3 Offset 12
+OpMemberDecorate %41 0 Offset 0
+OpMemberDecorate %41 1 Offset 16
+OpMemberDecorate %41 2 Offset 20
+OpMemberDecorate %41 3 Offset 24
+OpMemberDecorate %41 4 Offset 28
+OpMemberDecorate %41 5 Offset 32
+OpMemberDecorate %41 6 Offset 48
+OpMemberDecorate %41 7 Offset 64
+OpDecorate %41 Block
+OpDecorate %43 DescriptorSet 3
+OpDecorate %43 Binding 0
+%2 = OpTypeVoid
+%3 = OpTypeFunction %2
+%6 = OpTypeFloat 32
+%7 = OpTypeVector %6 4
+%8 = OpTypeMatrix %7 4
+%9 = OpTypePointer Output %8
+%10 = OpVariable %9 Output
+%11 = OpTypePointer Input %8
+%12 = OpVariable %11 Input
+%14 = OpTypeInt 32 0
+%15 = OpConstant %14 1
+%16 = OpTypeArray %6 %15
+%17 = OpTypeStruct %7 %6 %16 %16
+%18 = OpTypePointer Output %17
+%19 = OpVariable %18 Output
+%20 = OpTypeInt 32 1
+%21 = OpConstant %20 0
+%22 = OpTypePointer Input %7
+%23 = OpVariable %22 Input
+%25 = OpTypePointer Output %7
+%27 = OpConstant %14 2
+%28 = OpTypePointer Output %6
+%31 = OpConstant %14 3
+%35 = OpConstant %6 0.5
+%38 = OpTypeVector %20 4
+%39 = OpTypeVector %14 4
+%40 = OpTypeStruct %6 %6 %6 %6
+%41 = OpTypeStruct %7 %6 %6 %6 %14 %38 %39 %40
+%42 = OpTypePointer Uniform %41
+%43 = OpVariable %42 Uniform
+%4 = OpFunction %2 None %3
+%5 = OpLabel
+%13 = OpLoad %8 %12
+OpStore %10 %13
+%24 = OpLoad %7 %23
+%26 = OpAccessChain %25 %19 %21
+OpStore %26 %24
+%29 = OpAccessChain %28 %19 %21 %27
+%30 = OpLoad %6 %29
+%32 = OpAccessChain %28 %19 %21 %31
+%33 = OpLoad %6 %32
+%34 = OpFAdd %6 %30 %33
+%36 = OpFMul %6 %34 %35
+%37 = OpAccessChain %28 %19 %21 %27
+OpStore %37 %36
+OpReturn
+OpFunctionEnd
+)shader";
+
+	graphicsTest(src.str());
+
+	//test(src.str(), [](uint32_t i) { return i; }, [](uint32_t i) { return i; });
 }
 
 TEST_P(SwiftShaderVulkanBufferToBufferComputeTest, BranchSimple)

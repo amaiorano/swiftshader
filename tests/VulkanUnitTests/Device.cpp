@@ -40,6 +40,80 @@ Device::~Device()
 
 bool Device::IsValid() const { return device != nullptr; }
 
+VkResult Device::CreateGraphicsDevice(
+	Driver const *driver, VkInstance instance, std::unique_ptr<Device> &out, VkSurfaceFormatKHR& surfaceFormat)
+{
+	VkResult result;
+
+	// Gather all physical devices
+	std::vector<VkPhysicalDevice> physicalDevices;
+	result = GetPhysicalDevices(driver, instance, physicalDevices);
+	if (result != VK_SUCCESS)
+	{
+		return result;
+	}
+
+	VkSurfaceKHR surface{}; // TODO: get the surface from the window khr
+
+	for (auto physicalDevice : physicalDevices)
+	{
+		int queueFamilyIndex = GetGraphicsQueueFamilyIndex(driver, physicalDevice);
+		if (queueFamilyIndex < 0)
+		{
+			continue;
+		}
+
+		uint32_t nSurfaceFormats;
+		driver->vkGetPhysicalDeviceSurfaceFormatsKHR(
+			physicalDevice, surface, &nSurfaceFormats, nullptr);
+		std::vector<VkSurfaceFormatKHR> surface_formats(nSurfaceFormats);
+		driver->vkGetPhysicalDeviceSurfaceFormatsKHR(
+			physicalDevice, surface, &nSurfaceFormats,
+			surface_formats.data());
+		if (nSurfaceFormats < 1) {
+			continue;
+		}
+		surfaceFormat = surface_formats[0];
+
+
+
+		const float queuePrioritory = 1.0f;
+		const VkDeviceQueueCreateInfo deviceQueueCreateInfo = {
+			VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,  // sType
+			nullptr,                                     // pNext
+			0,                                           // flags
+			(uint32_t)queueFamilyIndex,                  // queueFamilyIndex
+			1,                                           // queueCount
+			&queuePrioritory,                            // pQueuePriorities
+		};
+
+		const VkDeviceCreateInfo deviceCreateInfo = {
+			VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,  // sType
+			nullptr,                               // pNext
+			0,                                     // flags
+			1,                                     // queueCreateInfoCount
+			&deviceQueueCreateInfo,                // pQueueCreateInfos
+			0,                                     // enabledLayerCount
+			nullptr,                               // ppEnabledLayerNames
+			0,                                     // enabledExtensionCount
+			nullptr,                               // ppEnabledExtensionNames
+			nullptr,                               // pEnabledFeatures
+		};
+
+		VkDevice device;
+		result = driver->vkCreateDevice(physicalDevice, &deviceCreateInfo, nullptr, &device);
+		if (result != VK_SUCCESS)
+		{
+			return result;
+		}
+
+		out.reset(new Device(driver, device, physicalDevice, static_cast<uint32_t>(queueFamilyIndex)));
+		return VK_SUCCESS;
+	}
+
+	return VK_SUCCESS;
+}
+
 VkResult Device::CreateComputeDevice(
 		Driver const *driver, VkInstance instance, std::unique_ptr<Device> &out)
 {
@@ -97,6 +171,19 @@ VkResult Device::CreateComputeDevice(
     }
 
     return VK_SUCCESS;
+}
+
+int Device::GetGraphicsQueueFamilyIndex(Driver const *driver, VkPhysicalDevice device)
+{
+	auto properties = GetPhysicalDeviceQueueFamilyProperties(driver, device);
+	for (uint32_t i = 0; i < properties.size(); i++)
+	{
+		if ((properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) != 0)
+		{
+			return static_cast<int>(i);
+		}
+	}
+	return -1;
 }
 
 int Device::GetComputeQueueFamilyIndex(

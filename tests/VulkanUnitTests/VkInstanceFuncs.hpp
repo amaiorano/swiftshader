@@ -67,3 +67,11 @@ VK_INSTANCE(vkUnmapMemory, void, VkDevice, VkDeviceMemory);
 VK_INSTANCE(vkUpdateDescriptorSets, void, VkDevice, uint32_t, const VkWriteDescriptorSet*, uint32_t,
             const VkCopyDescriptorSet*);
 VK_INSTANCE(vkDeviceWaitIdle, VkResult, VkDevice);
+
+
+VK_INSTANCE(vkCreateGraphicsPipelines, VkResult, VkDevice , VkPipelineCache , uint32_t , const VkGraphicsPipelineCreateInfo* , const VkAllocationCallbacks* , VkPipeline* );
+
+//VK_INSTANCE(vkCreatePipelineLayout, VkResult, VkDevice , const VkPipelineLayoutCreateInfo* , const VkAllocationCallbacks* , VkPipelineLayout* );
+VK_INSTANCE(vkCreateRenderPass, VkResult , VkDevice , const VkRenderPassCreateInfo* , const VkAllocationCallbacks* , VkRenderPass* );
+
+VK_INSTANCE(vkGetPhysicalDeviceSurfaceFormatsKHR, VkResult ,VkPhysicalDevice , VkSurfaceKHR , uint32_t* , VkSurfaceFormatKHR* );

@@ -27,6 +27,9 @@ public:
 	Device();
 	~Device();
 
+	static VkResult CreateGraphicsDevice(
+		Driver const *driver, VkInstance instance, std::unique_ptr<Device>& out, VkSurfaceFormatKHR& surfaceFormat);
+
 	// CreateComputeDevice enumerates the physical devices, looking for a device
 	// that supports compute.
 	// If a compatible physical device is found, then a device is created and
@@ -140,8 +143,13 @@ public:
 			Driver const *driver, VkInstance instance,
 			std::vector<VkPhysicalDevice> &out);
 
+	static int GetGraphicsQueueFamilyIndex(
+			Driver const *driver, VkPhysicalDevice device);
+
 	static int GetComputeQueueFamilyIndex(
 			Driver const *driver, VkPhysicalDevice device);
+
+	VkDevice Handle() const { return device; }
 
 private:
 	Device(Driver const *driver, VkDevice device, VkPhysicalDevice physicalDevice, uint32_t queueFamilyIndex);
