@@ -218,6 +218,7 @@ namespace sw
 			setupState = SetupProcessor::update(context);
 			pixelState = PixelProcessor::update(context);
 
+//***
 			vertexRoutine = VertexProcessor::routine(vertexState, context->pipelineLayout, context->vertexShader, context->descriptorSets);
 			setupRoutine = SetupProcessor::routine(setupState);
 			pixelRoutine = PixelProcessor::routine(pixelState, context->pipelineLayout, context->pixelShader, context->descriptorSets);

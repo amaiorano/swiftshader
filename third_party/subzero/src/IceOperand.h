@@ -877,7 +877,9 @@ protected:
   /// Number is unique across all variables, and is used as a (bit)vector index
   /// for liveness analysis.
   const SizeT Number;
-  VariableString Name;
+public:
+	VariableString Name;
+protected:
   bool IsArgument = false;
   bool IsImplicitArgument = false;
   /// IgnoreLiveness means that the variable should be ignored when constructing

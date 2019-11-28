@@ -594,9 +594,15 @@ namespace rr
 			Flags.setTargetInstructionSet(CPUID::SSE4_1 ? Ice::X86InstructionSet_SSE4_1 : Ice::X86InstructionSet_SSE2);
 		#endif
 		Flags.setOutFileType(Ice::FT_Elf);
+		
 		Flags.setOptLevel(toIce(getDefaultConfig().getOptimization().getLevel()));
+		//Flags.setOptLevel(toIce(rr::Optimization::Level::None));
+
+		//Flags.setRegAllocReserve(true);
+
 		Flags.setApplicationBinaryInterface(Ice::ABI_Platform);
-		Flags.setVerbose(subzeroDumpEnabled ? Ice::IceV_Most : Ice::IceV_None);
+		constexpr Ice::VerboseMask verboseMask = Ice::IceV_Most /*| Ice::IceV_LinearScan*/;
+		Flags.setVerbose(subzeroDumpEnabled ? verboseMask : Ice::IceV_None);
 		Flags.setDisableHybridAssembly(true);
 
 		static llvm::raw_os_ostream cout(std::cout);

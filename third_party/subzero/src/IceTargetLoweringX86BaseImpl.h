@@ -3292,7 +3292,26 @@ void TargetX86Base<TraitsType>::lowerCast(const InstCast *Instr) {
         // use v16i8 vectors.
         assert(getFlags().getApplicationBinaryInterface() != ABI_PNaCl &&
                "PNaCl only supports real 128-bit vectors");
+        
+		//auto *Src0R = legalizeToReg(Src0);
+		//Dest->setMustHaveReg();
+		//Dest->setRegNumTmp(Ice::RegNumT::fromInt(68));
+        //_movd(Dest, Src0R);
         _movd(Dest, legalize(Src0, Legal_Reg | Legal_Mem));
+
+		//Operand *Src0RM = legalize(Src0, Legal_Reg/* | Legal_Mem*/);
+		//Variable *T = makeReg(DestTy);
+		//_movd(T, Src0RM);
+		//_mov(Dest, T);
+
+		//auto *Src0R = legalize(Src0, Legal_Reg | Legal_Mem);//legalizeToReg(Src0);
+		//Variable *T = makeReg(Src0->getType());
+		//_mov(T, Src0R);
+		//_movd(Dest, T);
+
+		//auto *Src0R = legalizeToReg(Src0);
+		//_movd(Dest, Src0R);
+
       } else {
         _movp(Dest, legalizeToReg(Src0));
       }
@@ -7937,7 +7956,7 @@ Operand *TargetX86Base<TraitsType>::legalize(Operand *From, LegalMask Allowed,
   // substitution is not locked to a specific register, and when the types
   // match, in order to capture the vast majority of opportunities and avoid
   // corner cases in the lowering.
-  if (RegNum.hasNoValue()) {
+  if (/*false &&*/ RegNum.hasNoValue()) {
     if (Variable *Subst = getContext().availabilityGet(From)) {
       // At this point we know there is a potential substitution available.
       if (Subst->mustHaveReg() && !Subst->hasReg()) {
@@ -7992,6 +8011,10 @@ Operand *TargetX86Base<TraitsType>::legalize(Operand *From, LegalMask Allowed,
       Const = llvm::cast<Constant>(From);
     }
     // There should be no constants of vector type (other than undef).
+    if (isVectorType(Ty)) {
+      int a = 0;
+      a = a;
+    }
     assert(!isVectorType(Ty));
 
     // If the operand is a 64 bit constant integer we need to legalize it to a

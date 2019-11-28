@@ -117,6 +117,10 @@ void LinearScan::initForGlobal() {
   UnhandledPrecolored.reserve(Vars.size());
   // Gather the live ranges of all variables and add them to the Unhandled set.
   for (Variable *Var : Vars) {
+    if (Var->Name.getID() == 2235) {
+      int a = 0;
+      a = a;
+    }
     // Don't consider rematerializable variables.
     if (Var->isRematerializable())
       continue;
@@ -221,6 +225,10 @@ void LinearScan::initForInfOnly() {
       if (Instr.isDeleted())
         continue;
       FOREACH_VAR_IN_INST(Var, Instr) {
+        if (Var->Name.getID() == 2235) {
+          int a = 0;
+          a = a;
+        }
         if (Var->getIgnoreLiveness())
           continue;
         if (Var->hasReg() || Var->mustHaveReg()) {
@@ -246,6 +254,10 @@ void LinearScan::initForInfOnly() {
   UnhandledPrecolored.reserve(NumVars);
   for (SizeT i = 0; i < Vars.size(); ++i) {
     Variable *Var = Vars[i];
+    if (Var->Name.getID() == 2235) {
+      int a = 0;
+      a = a;
+    }
     if (Var->isRematerializable())
       continue;
     if (LRBegin[i] != Inst::NumberSentinel) {
@@ -306,6 +318,10 @@ void LinearScan::initForSecondChance() {
   Unhandled.reserve(Vars.size());
   UnhandledPrecolored.reserve(Vars.size());
   for (Variable *Var : Vars) {
+    if (Var->Name.getID() == 2235) {
+      int a = 0;
+      a = a;
+    }
     if (Var->isRematerializable())
       continue;
     if (Var->hasReg()) {
@@ -746,6 +762,7 @@ void LinearScan::handleNoFreeRegisters(IterationState &Iter) {
         --RegUses[RegAlias];
         assert(RegUses[RegAlias] >= 0);
       }
+	  //Item->setMustHaveReg(); // ***
       Item->setRegNumTmp(RegNumT());
       moveItem(Active, Index, Handled);
       Evicted.push_back(Item);
@@ -798,7 +815,12 @@ void LinearScan::assignFinalRegisters(const SmallBitVector &RegMaskFull,
 
   // Finish up by setting RegNum = RegNumTmp (or a random permutation thereof)
   // for each Variable.
+  int i = 0;
   for (Variable *Item : Handled) {
+    if (Item->Name.getID() == 2235) {
+      int a = 0;
+      a = a;
+    }
     const auto RegNum = Item->getRegNumTmp();
     auto AssignedRegNum = RegNum;
 
@@ -821,7 +843,14 @@ void LinearScan::assignFinalRegisters(const SmallBitVector &RegMaskFull,
       }
     }
     Item->setRegNum(AssignedRegNum);
+
+	//assert(Item->hasReg());
+	++i;
   }
+
+  //for (Variable* Item : Handled) {
+	 // assert(Item->hasReg());
+  //}
 }
 
 // Implements the linear-scan algorithm. Based on "Linear Scan Register
@@ -870,8 +899,13 @@ void LinearScan::scan(const SmallBitVector &RegMaskFull, bool Randomized) {
   Iter.Weights.reserve(NumRegisters);
   Iter.PrecoloredUnhandledMask.reserve(NumRegisters);
 
+  int j = 0;
   while (!Unhandled.empty()) {
     Iter.Cur = Unhandled.back();
+    if (Iter.Cur->Name.getID() == 2235) {
+      int a = 0;
+      a = a;
+    }
     Unhandled.pop_back();
     dumpLiveRangeTrace("\nConsidering  ", Iter.Cur);
     if (UseReserve)
@@ -967,7 +1001,34 @@ void LinearScan::scan(const SmallBitVector &RegMaskFull, bool Randomized) {
       // register and see if Cur has higher weight.
       handleNoFreeRegisters(Iter);
     }
+
+	int i = 0;
+	for (const Variable* Item : Active) {
+		if (!Item->hasRegTmp() && !Item->hasReg()) {
+			int a = 0;
+			a = a;
+		}
+		++i;
+	}
+	i = 0;
+	for (const Variable* Item : Active) {
+		if (!Item->hasRegTmp() && !Item->hasReg()) {
+			int a = 0;
+			a = a;
+		}
+		++i;
+	}
+	i = 0;
+	for (const Variable* Item : Handled) {
+		if (!Item->hasRegTmp() && !Item->hasReg()) {
+			int a = 0;
+			a = a;
+		}
+		++i;
+	}
+
     dump(Func);
+	++j;
   }
 
   // Move anything Active or Inactive to Handled for easier handling.

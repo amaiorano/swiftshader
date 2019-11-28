@@ -2363,6 +2363,10 @@ void InstImpl<TraitsType>::InstX86Movd::emitIAS(const Cfg *Func) const {
              (isScalarFloatingType(Dest->getType()) &&
               typeWidthInBytes(SrcVar->getType()) ==
                   typeWidthInBytes(Dest->getType())));
+      if (!Dest->hasReg()) {
+        int a = 1;
+        a = a;
+      }
       assert(Dest->hasReg());
       XmmRegister DestReg = Traits::getEncodedXmm(Dest->getRegNum());
       if (SrcVar->hasReg()) {

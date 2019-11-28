@@ -1253,6 +1253,11 @@ template <typename TraitsType> struct InstImpl {
       // are no more registers left to allocate. Revisit this and fix it the
       // right way.
       Dest->setMustHaveReg();
+      if (Dest->Name.getID() == 2235) {
+        int a = 0;
+        a = a;
+      }
+
       return new (Func->allocate<InstX86Movd>()) InstX86Movd(Func, Dest, Src);
     }
 
